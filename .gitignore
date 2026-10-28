@@ -1,0 +1,17 @@
+*.iml
+.gradle/
+local.properties
+.idea/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+
+# The release key must never reach this repository - it is public.
+*.jks
+*.keystore
+*.p12
+*.pem
+keystore*
+signing.properties

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OEPL NFC</string>
+    <string name="idle">Hold the phone against the tag to read it.</string>
+    <string name="no_nfc">This phone has no NFC.</string>
+    <string name="armed">Ready: %1$s — now hold the phone against the tag.</string>
+    <string name="working">%1$s…</string>
+    <string name="done">%1$s done.</string>
+    <string name="failed">%1$s failed.</string>
+    <string name="uploading">Uploading %1$d%% (%2$d/%3$d bytes) — keep the phone still.</string>
+
+    <!--
+        An action stays armed until it has worked. These say which attempt is
+        running, so a slipped phone reads as "tap again" rather than as the app
+        having quietly gone back to just reading the tag.
+    -->
+    <string name="working_attempt">%1$s… (attempt %2$d of %3$d)</string>
+    <string name="retry">%1$s: attempt %2$d of %3$d failed — hold the phone back on.</string>
+    <string name="gave_up">%1$s gave up after %2$d attempts. Press the button to try again.</string>
+    <string name="cancelled">Cancelled.</string>
+    <!--
+        The one that matters for a long transfer: this tap got further than any
+        before it, so the thing is working and only needs more contact. It does
+        not count against the attempt budget, and saying the percentage is the
+        difference between "it failed again" and "it is two thirds through".
+    -->
+    <string name="tag_left">%1$s: tag left the field — hold it back on.</string>
+    <string name="retry_progress">%1$s: %2$d%% done — hold the phone back on to carry on.</string>
+</resources>

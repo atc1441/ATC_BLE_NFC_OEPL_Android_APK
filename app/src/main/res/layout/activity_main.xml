@@ -1,0 +1,518 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The top block never scrolls away. What the tag is doing - armed, working,
+    how far through an upload, and the last few lines of the log - is the thing
+    you are looking at while a phone is held against a tag, and it used to be
+    at the bottom of a page you could not reach with the phone in the field.
+
+    Everything else lives in sections that collapse, so the one you are using
+    is on screen instead of being several screens down.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <!-- ================= PINNED HEADER ================= -->
+    <LinearLayout
+        android:id="@+id/header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#1A3F51B5"
+        android:orientation="vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="8dp">
+
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/idle"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/nfcState"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="2dp"
+            android:paddingBottom="4dp"
+            android:textSize="12sp" />
+
+        <ProgressBar
+            android:id="@+id/progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100" />
+
+        <TextView
+            android:id="@+id/live"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:maxLines="3"
+            android:paddingTop="4dp"
+            android:textSize="11sp" />
+
+        <!--
+            Only here while something is armed. An armed action survives a
+            failed tap on purpose, so there has to be a way out of it that is
+            not "tap the tag and hope it fails".
+        -->
+        <Button
+            android:id="@+id/btnCancel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Cancel what is armed"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="24dp">
+
+            <!-- ================= TAG ================= -->
+            <TextView
+                android:id="@+id/headTag"
+                style="@style/SectionHead"
+                android:text="Tag" />
+
+            <LinearLayout
+                android:id="@+id/secTag"
+                style="@style/SectionBody">
+
+                <Button
+                    android:id="@+id/btnRead"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Read tag" />
+
+                <TextView
+                    android:id="@+id/info"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:paddingTop="4dp"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- ================= IMAGE ================= -->
+            <TextView
+                android:id="@+id/headImage"
+                style="@style/SectionHead"
+                android:text="Image" />
+
+            <LinearLayout
+                android:id="@+id/secImage"
+                style="@style/SectionBody">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingBottom="4dp"
+                    android:text="Drag to move, pinch to zoom, twist with two fingers to rotate, double tap to reset. The preview shows the exact pixels that get sent."
+                    android:textSize="12sp" />
+
+                <io.github.atc1441.oeplnfc.PanelPreviewView
+                    android:id="@+id/preview"
+                    android:layout_width="match_parent"
+                    android:layout_height="260dp"
+                    android:background="#20808080" />
+
+                <TextView
+                    android:id="@+id/imgStats"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:paddingBottom="4dp"
+                    android:paddingTop="4dp"
+                    android:textSize="11sp" />
+
+                <Button
+                    android:id="@+id/btnUpload"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Upload image" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnPick"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Pick" />
+
+                    <Button
+                        android:id="@+id/btnRotL"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="⟲ 90" />
+
+                    <Button
+                        android:id="@+id/btnRotR"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="⟳ 90" />
+
+                    <Button
+                        android:id="@+id/btnReset"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Reset" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/lblZoom"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp" />
+
+                <SeekBar
+                    android:id="@+id/zoom"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="1000" />
+
+                <TextView
+                    android:id="@+id/lblRot"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp" />
+
+                <SeekBar
+                    android:id="@+id/rot"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="359" />
+
+                <CheckBox
+                    android:id="@+id/compress"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:text="Send compressed (much faster over NFC)" />
+
+                <TextView
+                    android:id="@+id/headImageMore"
+                    style="@style/SectionHead"
+                    android:text="Size, tone and dither" />
+
+                <LinearLayout
+                    android:id="@+id/secImageMore"
+                    style="@style/SectionBody">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingBottom="2dp"
+                        android:text="The panel size is taken from the tag when you read it, and corrected automatically on the tap if it does not match."
+                        android:textSize="12sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <EditText
+                            android:id="@+id/width"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:hint="width"
+                            android:importantForAutofill="no"
+                            android:inputType="number"
+                            android:text="200" />
+
+                        <EditText
+                            android:id="@+id/height"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:hint="height"
+                            android:importantForAutofill="no"
+                            android:inputType="number"
+                            android:text="152" />
+
+                        <Spinner
+                            android:id="@+id/fit"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/lblBright"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textSize="12sp" />
+
+                    <SeekBar
+                        android:id="@+id/bright"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:max="200" />
+
+                    <TextView
+                        android:id="@+id/lblContrast"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textSize="12sp" />
+
+                    <SeekBar
+                        android:id="@+id/contrast"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:max="200" />
+
+                    <TextView
+                        android:id="@+id/lblThreshold"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textSize="12sp" />
+
+                    <SeekBar
+                        android:id="@+id/threshold"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:max="255" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingTop="8dp"
+                        android:text="Dither"
+                        android:textSize="12sp" />
+
+                    <Spinner
+                        android:id="@+id/dither"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <CheckBox
+                            android:id="@+id/red"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Red" />
+
+                        <CheckBox
+                            android:id="@+id/yellow"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Yellow" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <CheckBox
+                            android:id="@+id/invert"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Invert" />
+
+                        <CheckBox
+                            android:id="@+id/flipH"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Flip H" />
+
+                        <CheckBox
+                            android:id="@+id/flipV"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Flip V" />
+                    </LinearLayout>
+
+                    <CheckBox
+                        android:id="@+id/blackBg"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Black background (for letterbox and transparency)" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ================= NDEF ================= -->
+            <TextView
+                android:id="@+id/headNdef"
+                style="@style/SectionHead"
+                android:text="NDEF content (persistent)" />
+
+            <LinearLayout
+                android:id="@+id/secNdef"
+                style="@style/SectionBody">
+
+                <EditText
+                    android:id="@+id/url"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="https://example.com/"
+                    android:importantForAutofill="no"
+                    android:inputType="textUri" />
+
+                <Button
+                    android:id="@+id/btnSetUrl"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Write URL" />
+
+                <EditText
+                    android:id="@+id/text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Any text"
+                    android:importantForAutofill="no"
+                    android:inputType="text" />
+
+                <Button
+                    android:id="@+id/btnSetText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Write text" />
+
+                <Button
+                    android:id="@+id/btnClearNdef"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Clear NDEF (back to default)" />
+            </LinearLayout>
+
+            <!-- ================= FIRMWARE ================= -->
+            <TextView
+                android:id="@+id/headFirmware"
+                style="@style/SectionHead"
+                android:text="Firmware update" />
+
+            <LinearLayout
+                android:id="@+id/secFirmware"
+                style="@style/SectionBody">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingBottom="4dp"
+                    android:text="A Telink .bin for this tag. Checked here the way the tag checks it, then sent over NFC - a couple of minutes of contact."
+                    android:textSize="12sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnFirmware"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Pick .bin" />
+
+                    <Button
+                        android:id="@+id/btnFlashFirmware"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Flash firmware" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ================= COMMANDS ================= -->
+            <TextView
+                android:id="@+id/headCommands"
+                style="@style/SectionHead"
+                android:text="Commands" />
+
+            <LinearLayout
+                android:id="@+id/secCommands"
+                style="@style/SectionBody">
+
+                <Button
+                    android:id="@+id/btnAllCommands"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="All commands and debug channel…" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnLed"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="LED" />
+
+                    <Button
+                        android:id="@+id/btnTime"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Clock" />
+
+                    <Button
+                        android:id="@+id/btnReboot"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Reboot" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ================= LOG ================= -->
+            <TextView
+                android:id="@+id/headLog"
+                style="@style/SectionHead"
+                android:text="Log" />
+
+            <LinearLayout
+                android:id="@+id/secLog"
+                style="@style/SectionBody">
+
+                <Button
+                    android:id="@+id/btnClearLog"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Clear log" />
+
+                <TextView
+                    android:id="@+id/log"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:paddingTop="8dp"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>
