@@ -946,57 +946,31 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
     /**
      * Write an NDEF configuration.
      *
-     * Always through BLE_CMD_SET_NDEF. The tag's NDEF file is read-only to a
-     * reader now and an UPDATE BINARY comes back 6985, which is deliberate in
-     * the firmware: one way in, with one set of rules about staging and when
-     * the flash write happens, rather than a second path open to any phone
-     * that happens to be held against the tag.
+     * Always as the access point does it: the record wrapped in a Type-2
+     * TLV and pushed as an OEPL block transfer with dataType
+     * DATATYPE_NFC_RAW_CONTENT.
      *
-     * Always in the AP's own form: a Type-2 TLV container (source 0xA0), byte
-     * for byte what the AP sends as DATATYPE_NFC_RAW_CONTENT.
+     * That is the one way the firmware accepts now. The direct command
+     * (BLE_CMD_SET_NDEF) is withdrawn, and it was withdrawn for a reason this
+     * function used to work around by hand: it carried no length agreement
+     * and no checksum, so a mangled write was stored mangled and answered
+     * "saved", and the only defence was to read the message back and compare
+     * - which could be mangled in turn.
      *
-     * The firmware also accepts the bare message (source 0xA2), and a
-     * checkbox used to choose between the two. It is gone. There is only one
-     * route in - a command, the same one the AP's content arrives by - so a
-     * tag configured from this app and a tag configured from an access point
-     * end up holding the identical bytes, and nothing here can produce a tag
-     * that differs from one in the field. A switch whose two settings have to
-     * agree is a switch that will one day be in the wrong position.
+     * The block transfer announces a length and a CRC32, is acknowledged part
+     * by part and is validated before a byte reaches flash. So the read-back
+     * loop is gone with it: the transfer either completes or says it did not.
      */
     private fun writeNdefConfig(nfc: OeplNfc, message: ByteArray, what: String) {
-        val body = NdefCodec.toType2Tlv(message)
-        val source = NdefSource.RAW
-        val how = "as an AP-format TLV"
-        val payload = ByteArray(1 + body.size)
-        payload[0] = source.toByte()
-        body.copyInto(payload, 1)
-        // Written, then read back and compared - and written again if it does
-        // not match. Nothing between here and the tag's flash carries a
-        // checksum: a staged command whose bytes were mangled on the way is
-        // stored mangled and answered 9000, and a read of it can be mangled
-        // in turn. Comparing what the tag reports against what was sent is
-        // the only thing that closes that, and it is cheap next to getting a
-        // configuration silently wrong.
-        var lastSeen: ByteArray? = null
-        for (attempt in 1..WRITE_TRIES) {
-            val reply = nfc.command(Cmd.SET_NDEF, payload)
-            if (reply != null && reply.cmd == Cmd.ERR)
-                throw OeplException("the tag rejected the configuration")
-            val back = nfc.readNdefAgreed()
-            lastSeen = back
-            if (back.contentEquals(message)) {
-                post {
-                    addLog("Wrote $what via SET_NDEF $how (${body.size} bytes)" +
-                        (if (attempt > 1) ", on attempt $attempt" else "") + ".")
-                    addLog("Tag now reports: " + NdefCodec.describe(back))
-                }
-                return
-            }
-            post { addLog("Read-back did not match, writing again ($attempt).") }
+        val tlv = NdefCodec.toType2Tlv(message)
+        uploadData(
+            nfc, tlv, DataType.NFC_RAW_CONTENT,
+            onLog = { line -> post { addLog(line) } }
+        )
+        post {
+            addLog("Wrote $what as an AP-format TLV (${tlv.size} bytes).")
+            addLog("Sent: " + NdefCodec.describe(message))
         }
-        post { addLog("Tag reports: " + NdefCodec.describe(lastSeen ?: ByteArray(0))) }
-        throw OeplException(
-            "the tag did not store the configuration unchanged after $WRITE_TRIES tries")
     }
 
     /**
