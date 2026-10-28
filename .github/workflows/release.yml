@@ -30,29 +30,6 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # versionCode has to climb or a phone refuses the upgrade, and the only
-      # number that reliably climbs here is the run number. Stamped at build
-      # time rather than committed, so the Gradle files stay byte-identical to
-      # the sources this repo mirrors and a re-sync never conflicts.
-      - name: Stamp version
-        id: version
-        run: |
-          set -euo pipefail
-          CODE=$(( ${{ github.run_number }} + 1000 ))
-          NAME="1.0.${{ github.run_number }}"
-          sed -i "s/^\( *versionCode *= *\).*/\1${CODE}/" app/build.gradle.kts
-          sed -i "s/^\( *versionName *= *\).*/\1\"${NAME}\"/" app/build.gradle.kts
-          grep -E 'versionCode|versionName' app/build.gradle.kts
-          echo "code=${CODE}" >> "$GITHUB_OUTPUT"
-          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
-
-      # Instrumented tests need a device, so only the JVM ones run here.
-      - name: Unit tests
-        run: ./gradlew --no-daemon test
-
-      - name: Assemble release
-        run: ./gradlew --no-daemon assembleRelease
-
       - name: Check signing secrets
         id: secrets
         env:
@@ -65,21 +42,54 @@ jobs:
             echo "::warning::KEYSTORE_BASE64 is not set - this build produces an unsigned APK, which Android will refuse to install."
           fi
 
+      # versionCode has to climb or a phone refuses the upgrade, and the only
+      # number that reliably climbs here is the run number. build.gradle.kts
+      # reads it from the environment, so nothing in the tree is rewritten and
+      # a local build and this one stay the same build.
+      - name: Pick version
+        id: version
+        run: |
+          set -euo pipefail
+          echo "code=$(( ${{ github.run_number }} + 1000 ))" >> "$GITHUB_OUTPUT"
+          echo "name=1.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      # Instrumented tests need a device, so only the JVM ones run here.
+      - name: Unit tests
+        run: ./gradlew --no-daemon test
+
+      # The keystore is written to disk and handed to Gradle, which signs via
+      # the signingConfig in app/build.gradle.kts - the same code path a local
+      # release build takes. One signing path means an APK built here and one
+      # built by hand carry the same signature, so either upgrades the other
+      # instead of demanding an uninstall.
+      - name: Assemble release
+        env:
+          OEPL_VERSION_CODE: ${{ steps.version.outputs.code }}
+          OEPL_VERSION_NAME: ${{ steps.version.outputs.name }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          OEPL_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          OEPL_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          OEPL_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.secrets.outputs.present }}" = "true" ]; then
+            export OEPL_KEYSTORE="$RUNNER_TEMP/release.jks"
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$OEPL_KEYSTORE"
+          fi
+          ./gradlew --no-daemon assembleRelease
+          rm -f "$RUNNER_TEMP/release.jks"
+
       # Signing lives here instead of in a Gradle signingConfig for the same
       # reason as the version stamp: nothing in the mirrored sources has to
       # know that this repo publishes releases.
       - name: Package APK
         id: apk
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
           BUILT=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
           test -n "$BUILT" || { echo "no APK produced"; exit 1; }
           echo "built: $BUILT"
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
 
           if [ "${{ steps.secrets.outputs.present }}" != "true" ]; then
             OUT="ATC_BLE_OEPL_NFC-${{ steps.version.outputs.name }}-unsigned.apk"
@@ -88,21 +98,20 @@ jobs:
             exit 0
           fi
 
-          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          echo "build-tools: $BT"
-          KS="$RUNNER_TEMP/release.jks"
-          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$KS"
           OUT="ATC_BLE_OEPL_NFC-${{ steps.version.outputs.name }}.apk"
-          "$BT/zipalign" -p -f 4 "$BUILT" "$RUNNER_TEMP/aligned.apk"
-          "$BT/apksigner" sign \
-            --ks "$KS" \
-            --ks-pass env:KEYSTORE_PASSWORD \
-            --ks-key-alias "$KEY_ALIAS" \
-            --key-pass env:KEY_PASSWORD \
-            --out "$OUT" \
-            "$RUNNER_TEMP/aligned.apk"
-          rm -f "$KS"
+          "$BT/zipalign" -p -f 4 "$BUILT" "$OUT"
           "$BT/apksigner" verify --print-certs "$OUT"
+
+          # The whole point of a fixed key is that this digest never changes.
+          # If it ever does, every installed copy would need an uninstall, so
+          # the build fails rather than shipping a stranger's signature.
+          EXPECTED=76cb3e15b3fafb989bcfa47cd52073fd4f6d3c3465851fd141d40e2495ac81ec
+          GOT=$("$BT/apksigner" verify --print-certs "$OUT"             | grep -m1 'certificate SHA-256 digest' | awk '{print $NF}')
+          if [ "$GOT" != "$EXPECTED" ]; then
+            echo "::error::APK signed with the wrong key. expected $EXPECTED, got $GOT"
+            exit 1
+          fi
+          echo "signature verified: $GOT"
           echo "path=$OUT" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
