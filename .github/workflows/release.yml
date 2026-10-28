@@ -72,16 +72,15 @@ jobs:
           OEPL_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
+          trap 'rm -f "$RUNNER_TEMP/release.jks"' EXIT
           if [ "${{ steps.secrets.outputs.present }}" = "true" ]; then
             export OEPL_KEYSTORE="$RUNNER_TEMP/release.jks"
             printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$OEPL_KEYSTORE"
           fi
           ./gradlew --no-daemon assembleRelease
-          rm -f "$RUNNER_TEMP/release.jks"
 
-      # Signing lives here instead of in a Gradle signingConfig for the same
-      # reason as the version stamp: nothing in the mirrored sources has to
-      # know that this repo publishes releases.
+      # Gradle has already signed; this only gives the APK a name worth
+      # downloading and checks the signature is the one it should be.
       - name: Package APK
         id: apk
         run: |
