@@ -81,6 +81,12 @@ jobs:
 
       # Gradle has already signed; this only gives the APK a name worth
       # downloading and checks the signature is the one it should be.
+      # Gradle has already aligned and signed the APK, so this only gives it a
+      # name worth downloading and checks the signature.
+      #
+      # Do not zipalign here. AGP aligns before it signs, and re-running
+      # zipalign on a signed APK rewrites the zip and drops the APK Signature
+      # Scheme v2 block, which apksigner then reports as "Signature stripped?".
       - name: Package APK
         id: apk
         run: |
@@ -98,14 +104,17 @@ jobs:
           fi
 
           OUT="ATC_BLE_OEPL_NFC-${{ steps.version.outputs.name }}.apk"
-          "$BT/zipalign" -p -f 4 "$BUILT" "$OUT"
-          "$BT/apksigner" verify --print-certs "$OUT"
+          cp "$BUILT" "$OUT"
+
+          # -c checks alignment without touching the file.
+          "$BT/zipalign" -c -p 4 "$OUT"
+          "$BT/apksigner" verify --verbose --print-certs "$OUT"
 
           # The whole point of a fixed key is that this digest never changes.
-          # If it ever does, every installed copy would need an uninstall, so
-          # the build fails rather than shipping a stranger's signature.
+          # If it ever does, every installed copy would need an uninstall
+          # before it could update, so fail rather than publish it.
           EXPECTED=76cb3e15b3fafb989bcfa47cd52073fd4f6d3c3465851fd141d40e2495ac81ec
-          GOT=$("$BT/apksigner" verify --print-certs "$OUT"             | grep -m1 'certificate SHA-256 digest' | awk '{print $NF}')
+          GOT=$("$BT/apksigner" verify --print-certs "$OUT" | grep -m1 'certificate SHA-256 digest' | awk '{print $NF}')
           if [ "$GOT" != "$EXPECTED" ]; then
             echo "::error::APK signed with the wrong key. expected $EXPECTED, got $GOT"
             exit 1
