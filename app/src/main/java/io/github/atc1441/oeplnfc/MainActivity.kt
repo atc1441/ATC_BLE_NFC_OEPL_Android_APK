@@ -718,7 +718,7 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
                 // by default and carry on.
                 post { addLog("Capability container unreadable: ${e.message}") }
             }
-            // No unlock. The PIN guards BLE and the access point, never NFC -
+            // No unlock. The PIN guards BLE, never NFC -
             // a tag that should not take commands from a passing phone has
             // its NFC command channel switched off instead, and only BLE can
             // switch it back on. See the note where unlockIfNeeded() used to

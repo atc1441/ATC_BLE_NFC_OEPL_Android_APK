@@ -736,7 +736,7 @@ object Commands {
                 "through the field, including turning this back on. Only BLE or " +
                 "the AP can do that.",
             category = "Protection",
-            danger = "NFC cannot switch itself back on. You will need BLE or the AP."
+            danger = "NFC cannot switch itself back on. You will need a BLE client."
         ),
         CommandSpec(
             Cmd.NFC_CMDS_ENABLE, "Enable NFC commands",
@@ -746,13 +746,13 @@ object Commands {
         // There were two more here, 'Set or clear the PIN' and
         // 'Unlock'. They are not offered any more, because this app
         // talks NFC and the tag refuses both of them over NFC outright:
-        // the PIN guards BLE and the access point, and a passer-by who
+        // the PIN guards BLE, and a passer-by who
         // could set one by holding a phone to the tag would be setting
         // the lock on somebody else's BLE. Use the web tool over BLE.
         //
         // What protects a tag from a passing phone is the switch above:
         // 'Disable NFC commands', which is persistent and can only be
-        // undone over BLE or by the AP.
+        // undone over BLE.
     )
 
     // --- the debug channel ------------------------------------------------

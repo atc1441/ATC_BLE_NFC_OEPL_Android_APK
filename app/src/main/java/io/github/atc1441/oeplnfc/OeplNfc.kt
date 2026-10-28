@@ -728,10 +728,10 @@ class OeplNfc(private val iso: IsoDep) {
     // There was an unlockIfNeeded() here, and a PIN field in the app
     // feeding it. Both are gone.
     //
-    // The PIN guards BLE and the access point, not NFC. A tag that
+    // The PIN guards BLE, not NFC. A tag that
     // should not take commands from a passing phone has its NFC command
     // channel switched off instead - persistent, and only switchable
-    // back on over BLE or by the AP, which is a far stronger thing than
+    // back on over BLE, which is a far stronger thing than
     // a PIN and much simpler to be sure of.
     //
     // Two transports having to agree about one lock is what never
