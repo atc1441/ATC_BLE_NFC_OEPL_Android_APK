@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.text.Editable
 import android.text.TextWatcher
@@ -1163,6 +1164,30 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
     // One image picker does not justify pulling in the activity-result library.
     @Suppress("DEPRECATION")
     private fun pickImage() {
+        // The system photo picker, asked for by name, so one tap picks.
+        //
+        // ACTION_GET_CONTENT is routed by the device and lands wherever the
+        // vendor wants it. On the phones this app is used on that is the
+        // vendor gallery, which presents an image grid with checkboxes and a
+        // confirm button - so choosing one picture costs a tap to select and
+        // another to confirm, and it invites picking several when only one
+        // can be used.
+        //
+        // ACTION_PICK_IMAGES is the photo picker itself rather than a
+        // suggestion, and without EXTRA_PICK_IMAGES_MAX it is single-select:
+        // a tap on an image returns it and closes. Android 13 and up only,
+        // hence the fallbacks below, which are what every device used before
+        // and still what a stripped build gets.
+        if (Build.VERSION.SDK_INT >= 33) {
+            val pick = Intent(MediaStore.ACTION_PICK_IMAGES).apply {
+                type = "image/*"
+            }
+            try {
+                startActivityForResult(pick, REQ_IMAGE)
+                return
+            } catch (_: ActivityNotFoundException) {
+            }
+        }
         // ACTION_GET_CONTENT goes to the system photo picker on Android 13+ and
         // to the documents UI before that. If a device has neither - some
         // stripped builds do not - fall back to OPEN_DOCUMENT rather than
