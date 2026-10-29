@@ -1420,16 +1420,57 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
      *
      * Every push to the default branch publishes a signed APK as a release, so
      * the phone can tell whether it is behind by asking the releases page. It
-     * is asked once per start of the activity, never without a working network
-     * (see AppUpdate.isOnline), and the answer only ever offers - nothing is
-     * downloaded or installed without a tap.
+     * is asked on the way in but at most once an hour (see CHECK_EVERY_MS),
+     * never without a working network (see AppUpdate.isOnline), and the answer
+     * only ever offers - nothing is downloaded or installed without a tap.
+     *
+     * "Check now" is not rate limited. The limit exists so the app does not
+     * ask again every time the activity happens to be built again - rotating
+     * the phone does that, and so does Android reclaiming the app in the
+     * background - and none of that is a reason to make the user wait.
      */
     private fun setupUpdates() {
         showAppState(null)
         btnUpdateCheck.setOnClickListener { checkForUpdate(manual = true) }
         btnUpdateInstall.setOnClickListener { downloadAndInstall() }
+        restoreKnownUpdate()
         checkForUpdate(manual = false)
     }
+
+    /**
+     * Put back the release the last check found, if it is still newer than
+     * what is installed.
+     *
+     * Without this the offer would disappear on the next start and come back
+     * an hour later, because the check that found it is not allowed to run
+     * again yet. A release that is no longer newer - it was installed - is
+     * forgotten here.
+     */
+    private fun restoreKnownUpdate() {
+        val stored = prefs().getString(PREF_UPDATE_RELEASE, "") ?: ""
+        val r = AppUpdate.decodeRelease(stored)
+        val installed = AppUpdate.installedVersion(this).first
+        if (r == null || !AppUpdate.isNewer(r.versionName, installed)) {
+            if (stored.isNotEmpty()) prefs().edit().remove(PREF_UPDATE_RELEASE).apply()
+            return
+        }
+        update = r
+        btnUpdateInstall.isEnabled = r.signed
+        showAppState("${r.tag} is available, ${kB(r.size)} kB.")
+    }
+
+    /** How long ago the last check that got an answer was, in words. */
+    private fun sinceLastCheck(): String {
+        val mins = (System.currentTimeMillis()
+            - prefs().getLong(PREF_UPDATE_CHECKED, 0L)) / 60_000L
+        return when {
+            mins <= 0L -> "just now"
+            mins == 1L -> "a minute ago"
+            else -> "$mins minutes ago"
+        }
+    }
+
+    private fun kB(bytes: Long) = (bytes + 1023) / 1024
 
     /** First line of the App section: what is installed, then [extra]. */
     private fun showAppState(extra: String?) {
@@ -1439,6 +1480,21 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
 
     private fun checkForUpdate(manual: Boolean) {
         if (updateBusy) return
+        if (!manual) {
+            // Only the automatic one waits. A negative value means the clock
+            // moved backwards since the last check, which is a reason to check
+            // rather than to trust the stored time.
+            val since = System.currentTimeMillis() - prefs().getLong(PREF_UPDATE_CHECKED, 0L)
+            if (since in 0 until CHECK_EVERY_MS) {
+                val known = update
+                showAppState(
+                    if (known != null) "${known.tag} is available, ${kB(known.size)} kB."
+                    else "Up to date as of ${sinceLastCheck()}. Checked at most " +
+                        "once an hour; \"Check now\" asks straight away."
+                )
+                return
+            }
+        }
         if (!AppUpdate.isOnline(this)) {
             // The point of asking first: no request, no socket timeout, and no
             // error that reads as if something were broken. This phone spends
@@ -1481,15 +1537,21 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
             if (manual) addLog("Update check failed: $why")
             return
         }
+        // Only a check that got an answer counts against the hour. A failed
+        // one leaves the old time in place, so the next start tries again
+        // instead of waiting out an hour on a timeout.
+        prefs().edit().putLong(PREF_UPDATE_CHECKED, System.currentTimeMillis()).apply()
         val installed = AppUpdate.installedVersion(this).first
         if (!AppUpdate.isNewer(r.versionName, installed)) {
             update = null
             btnUpdateInstall.isEnabled = false
+            prefs().edit().remove(PREF_UPDATE_RELEASE).apply()
             showAppState("${r.tag} is the newest release, so this is up to date.")
             if (manual) addLog("Already on the newest release, ${r.tag}.")
             return
         }
         update = r
+        prefs().edit().putString(PREF_UPDATE_RELEASE, AppUpdate.encodeRelease(r)).apply()
         if (!r.signed) {
             // CI publishes an unsigned APK when the signing secrets are
             // missing. Android cannot install one at all, so do not pretend.
@@ -1500,7 +1562,7 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
             return
         }
         btnUpdateInstall.isEnabled = true
-        showAppState("${r.tag} is available, ${(r.size + 1023) / 1024} kB.")
+        showAppState("${r.tag} is available, ${kB(r.size)} kB.")
         addLog("Update available: ${r.tag} (${r.assetName}).")
         openSection(R.id.headApp)
         // Asked once per release. The button stays, so saying "not now" does
@@ -1513,7 +1575,7 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
                 ("%s is published; %s is installed.\n\n%s, %d kB. It is downloaded " +
                     "from the project's releases page and handed to Android's " +
                     "installer, which asks before it replaces this app.")
-                    .format(r.tag, installed, r.assetName, (r.size + 1023) / 1024)
+                    .format(r.tag, installed, r.assetName, kB(r.size))
             )
             .setPositiveButton("Download & install") { _, _ -> downloadAndInstall() }
             .setNegativeButton("Not now", null)
@@ -1641,6 +1703,16 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
 
         /** The release tag the update dialog has already been shown for. */
         private const val PREF_UPDATE_OFFERED = "update_offered"
+
+        /** When the last check got an answer, and what it found. */
+        private const val PREF_UPDATE_CHECKED = "update_checked_at"
+        private const val PREF_UPDATE_RELEASE = "update_release"
+
+        /**
+         * How long the automatic check waits between two asks. "Check now"
+         * ignores it; see setupUpdates().
+         */
+        private const val CHECK_EVERY_MS = 60 * 60 * 1000L
 
         private const val REQ_IMAGE = 1
         private const val REQ_FIRMWARE = 2

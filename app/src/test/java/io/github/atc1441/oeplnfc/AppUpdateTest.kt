@@ -138,6 +138,44 @@ class AppUpdateTest {
         assertFalse(AppUpdate.isNewer(r.versionName, "1.0.6"))
     }
 
+    // --- remembering it between starts --------------------------------------
+
+    @Test
+    fun aReleaseSurvivesBeingWrittenDownAndReadBack() {
+        // The automatic check runs at most once an hour, so between two checks
+        // the offer has to come out of the preferences instead of off the
+        // network - including the URL a download would use.
+        val r = AppUpdate.parseRelease(
+            release("ATC_BLE_OEPL_NFC-1.0.52.apk" to 4_200_000L)
+        )!!
+        val back = AppUpdate.decodeRelease(AppUpdate.encodeRelease(r))
+        assertEquals(r, back)
+    }
+
+    @Test
+    fun nonsenseIsNotTakenAsARememberedRelease() {
+        assertNull(AppUpdate.decodeRelease(""))
+        assertNull(AppUpdate.decodeRelease("v1.0.52"))
+        // A download is pointed at this, so it has to be https and it has to
+        // be a release of this repository - not whatever ends up in the
+        // preferences file.
+        assertNull(
+            AppUpdate.decodeRelease(
+                "v1.0.52a.apk10http://github.com/" +
+                    AppUpdate.REPO + "/releases/download/v1.0.52/a.apk"
+            )
+        )
+        assertNull(
+            AppUpdate.decodeRelease(
+                "v1.0.52a.apk10https://example.com/a.apk"
+            )
+        )
+        assertNull(
+            AppUpdate.decodeRelease("v1.0.52a.apknot-a-size" +
+                "https://github.com/" + AppUpdate.REPO + "/releases/download/v1.0.52/a.apk")
+        )
+    }
+
     @Test
     fun aSignedAssetWinsOverAnUnsignedOneInTheSameRelease() {
         val r = AppUpdate.parseRelease(

@@ -531,7 +531,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingTop="4dp"
-                    android:text="Checked against the project's releases page at startup, and never without a working network connection."
+                    android:text="Checked against the project's releases page on the way in, at most once an hour, and never without a working network connection. Check now always asks."
                     android:textSize="11sp" />
             </LinearLayout>
 

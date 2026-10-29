@@ -104,6 +104,30 @@ object AppUpdate {
         return pick
     }
 
+    /**
+     * A release as one line of text, and back.
+     *
+     * The automatic check is rate limited, so between two checks the app has
+     * to be able to go on offering what the last one found - otherwise the
+     * offer would vanish on the next start and come back an hour later. The
+     * separator is a character that cannot occur in a tag, a file name or a
+     * URL, so nothing has to be escaped.
+     */
+    fun encodeRelease(r: Release): String =
+        listOf(r.tag, r.assetName, r.size.toString(), r.url).joinToString("\u0001")
+
+    fun decodeRelease(s: String): Release? {
+        val p = s.split("\u0001")
+        if (p.size != 4) return null
+        val (tag, asset, size, url) = p
+        val bytes = size.toLongOrNull() ?: return null
+        // Not just shape: this is what a download will be pointed at, so it
+        // has to be https and it has to be a release of this repository.
+        if (tag.isEmpty() || asset.isEmpty()) return null
+        if (!url.startsWith("https://github.com/$REPO/releases/")) return null
+        return Release(tag, tag.removePrefix("v"), asset, url, bytes)
+    }
+
     /** Ask the releases page what the newest version is. */
     @Throws(IOException::class)
     fun fetchLatest(): Release? {

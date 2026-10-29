@@ -256,9 +256,23 @@ app can read that same page: `AppUpdate.fetchLatest()` asks the GitHub API for
 the latest release, takes the `.apk` asset out of the answer, and compares its
 tag against the installed `versionName` number by number. A local build carries
 the baseline `1.0`, so it counts as older than anything published - otherwise a
-hand-built APK would never be offered the update. The check runs once per start
-of the screen and from the **App version** section's *Check now*; the download
-only ever happens on a tap.
+hand-built APK would never be offered the update. The download only ever
+happens on a tap.
+
+The automatic check runs on the way in, but **at most once an hour**. It sits
+in `onCreate`, and an activity is built more often than one would think -
+rotating the phone does it, so does Android reclaiming the app in the
+background - and asking the releases page every one of those times is asking
+far too often. *Check now* in the **App version** section is not rate limited
+and asks straight away.
+
+Two things follow from that hour, and both are handled: only a check that got
+an answer counts against it, so a failed one is tried again on the next start
+rather than locking the hour in on a timeout; and the release a check found is
+written down, so the offer is still there on the starts that are not allowed to
+check instead of disappearing until the hour is up. What is written down is
+read back with the same care as the API's answer - https, and a release of this
+repository - because it is what a download gets pointed at.
 
 Nothing is attempted without a network, and "a network" means
 `NET_CAPABILITY_VALIDATED`, not merely an association. The phone this runs on
