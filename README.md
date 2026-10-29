@@ -249,6 +249,44 @@ so does the OEPL AP:
   is the form the AP sends as `DATATYPE_NFC_RAW_CONTENT`. Same code path on the
   tag as a push from the AP, which is the point of offering it.
 
+## Keeping itself up to date
+
+Every push to the default branch publishes a signed APK as a release, and the
+app can read that same page: `AppUpdate.fetchLatest()` asks the GitHub API for
+the latest release, takes the `.apk` asset out of the answer, and compares its
+tag against the installed `versionName` number by number. A local build carries
+the baseline `1.0`, so it counts as older than anything published - otherwise a
+hand-built APK would never be offered the update. The check runs once per start
+of the screen and from the **App version** section's *Check now*; the download
+only ever happens on a tap.
+
+Nothing is attempted without a network, and "a network" means
+`NET_CAPABILITY_VALIDATED`, not merely an association. The phone this runs on
+stands in front of shelves with no connectivity, and a check that waits out a
+socket timeout at startup there is worse than one that never ran. Offline it
+says so in the section and stays quiet in the log.
+
+Before the installer is opened, the downloaded file is checked against the
+phone it would be installed on - package name, signing certificate against this
+app's own, and the `versionCode` inside the APK against the installed one. That
+is not belt and braces: Android's own answer to an APK signed with a different
+key is "App not installed", with no reason given, and the one thing that would
+cause it here (a debug build trying to install a release, or the other way
+round) is also the one thing the app can detect and say out loud. An unsigned
+release - which CI does publish when the signing secrets are missing - is
+recognised from the asset's name and not offered at all.
+
+Two Android details that are easy to get wrong, and are handled:
+
+* From Android 8 `REQUEST_INSTALL_PACKAGES` in the manifest is not enough. The
+  user grants it per app, and without it the installer opens and closes again
+  saying nothing. So it is asked for *before* the download, with a dialog that
+  leads to the right settings page.
+* From Android 7 a `file://` URI into the app's own storage cannot be read by
+  the installer and raises `FileUriExposedException`. The APK goes through a
+  `FileProvider` (`res/xml/file_paths.xml`), out of the cache directory, which
+  holds the one release being installed and nothing else.
+
 ## Commands
 
 The main screen carries the things you reach for constantly. Everything else
@@ -327,6 +365,7 @@ app can send 255.
 | `NdefCodec.kt` | URI and Text records, the Type-2 TLV container, and a decoder for the log |
 | `ImagePack.kt` | bitmap → OEPL plane format, with Floyd-Steinberg matching the web tool |
 | `MainActivity.kt` | the main screen |
+| `AppUpdate.kt` | the update check: the releases API, the download, and what has to hold before the installer is opened |
 | `Commands.kt` | the command catalogue: ids, parameters, endianness, reply decoders |
 | `CommandActivity.kt` | the generated form that drives all of them |
 

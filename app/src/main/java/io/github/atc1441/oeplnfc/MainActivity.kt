@@ -78,6 +78,16 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
     private lateinit var heightField: EditText
     private lateinit var preview: PanelPreviewView
 
+    private lateinit var appState: TextView
+    private lateinit var btnUpdateCheck: Button
+    private lateinit var btnUpdateInstall: Button
+
+    /** The release the last check found, if it is newer than this app. */
+    private var update: AppUpdate.Release? = null
+
+    /** Set while a check or a download is running, so a second tap is a no-op. */
+    private var updateBusy = false
+
     private lateinit var zoomBar: SeekBar
     private lateinit var rotBar: SeekBar
     private lateinit var brightBar: SeekBar
@@ -186,6 +196,9 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
         widthField = findViewById(R.id.width)
         heightField = findViewById(R.id.height)
         preview = findViewById(R.id.preview)
+        appState = findViewById(R.id.appState)
+        btnUpdateCheck = findViewById(R.id.btnUpdateCheck)
+        btnUpdateInstall = findViewById(R.id.btnUpdateInstall)
 
         zoomBar = findViewById(R.id.zoom)
         rotBar = findViewById(R.id.rot)
@@ -211,6 +224,7 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
 
         setupImageControls()
         setupTagActions()
+        setupUpdates()
         syncControls()
         showNfcState()
         maybeUseGeneratedImage(intent)
@@ -269,6 +283,7 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
             R.id.headNdef to R.id.secNdef,
             R.id.headFirmware to R.id.secFirmware,
             R.id.headCommands to R.id.secCommands,
+            R.id.headApp to R.id.secApp,
             R.id.headLog to R.id.secLog
         )
         val open = setOf(R.id.headTag, R.id.headImage)
@@ -1398,6 +1413,197 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
         }
     }
 
+    // --- keeping the app up to date -----------------------------------------
+
+    /**
+     * The App section, and the check that runs by itself on the way in.
+     *
+     * Every push to the default branch publishes a signed APK as a release, so
+     * the phone can tell whether it is behind by asking the releases page. It
+     * is asked once per start of the activity, never without a working network
+     * (see AppUpdate.isOnline), and the answer only ever offers - nothing is
+     * downloaded or installed without a tap.
+     */
+    private fun setupUpdates() {
+        showAppState(null)
+        btnUpdateCheck.setOnClickListener { checkForUpdate(manual = true) }
+        btnUpdateInstall.setOnClickListener { downloadAndInstall() }
+        checkForUpdate(manual = false)
+    }
+
+    /** First line of the App section: what is installed, then [extra]. */
+    private fun showAppState(extra: String?) {
+        val (name, code) = AppUpdate.installedVersion(this)
+        appState.text = "Installed $name ($code)" + (extra?.let { "\n$it" } ?: "")
+    }
+
+    private fun checkForUpdate(manual: Boolean) {
+        if (updateBusy) return
+        if (!AppUpdate.isOnline(this)) {
+            // The point of asking first: no request, no socket timeout, and no
+            // error that reads as if something were broken. This phone spends
+            // its time in front of shelves with no connectivity.
+            showAppState("No network, so nothing was checked.")
+            if (manual) addLog("No network - the update check needs one.")
+            return
+        }
+        updateBusy = true
+        btnUpdateCheck.isEnabled = false
+        showAppState("Checking the releases page...")
+        Thread {
+            var found: AppUpdate.Release? = null
+            var failed: String? = null
+            try {
+                found = AppUpdate.fetchLatest()
+                if (found == null) failed = "the latest release has no APK attached"
+            } catch (e: Exception) {
+                failed = e.message ?: e.javaClass.simpleName
+            }
+            val r = found
+            val why = failed
+            post {
+                updateBusy = false
+                btnUpdateCheck.isEnabled = true
+                updateChecked(r, why, manual)
+            }
+        }.start()
+    }
+
+    private fun updateChecked(r: AppUpdate.Release?, failed: String?, manual: Boolean) {
+        // The answer comes back off a thread, and the screen may be gone by
+        // then - a dialog on a finished activity is a crash, not a dialog.
+        if (isFinishing || isDestroyed) return
+        if (r == null) {
+            val why = failed ?: "no release"
+            showAppState("Could not reach the releases page: $why")
+            // Quiet unless it was asked for: a failed check is not news while
+            // the phone is being held against a tag.
+            if (manual) addLog("Update check failed: $why")
+            return
+        }
+        val installed = AppUpdate.installedVersion(this).first
+        if (!AppUpdate.isNewer(r.versionName, installed)) {
+            update = null
+            btnUpdateInstall.isEnabled = false
+            showAppState("${r.tag} is the newest release, so this is up to date.")
+            if (manual) addLog("Already on the newest release, ${r.tag}.")
+            return
+        }
+        update = r
+        if (!r.signed) {
+            // CI publishes an unsigned APK when the signing secrets are
+            // missing. Android cannot install one at all, so do not pretend.
+            btnUpdateInstall.isEnabled = false
+            showAppState("${r.tag} is published but unsigned, so it cannot be " +
+                "installed. See ${AppUpdate.RELEASES_URL}")
+            addLog("Release ${r.tag} is unsigned - not offering it.")
+            return
+        }
+        btnUpdateInstall.isEnabled = true
+        showAppState("${r.tag} is available, ${(r.size + 1023) / 1024} kB.")
+        addLog("Update available: ${r.tag} (${r.assetName}).")
+        openSection(R.id.headApp)
+        // Asked once per release. The button stays, so saying "not now" does
+        // not mean being asked again at every start until it is taken.
+        if (prefs().getString(PREF_UPDATE_OFFERED, "") == r.tag) return
+        prefs().edit().putString(PREF_UPDATE_OFFERED, r.tag).apply()
+        AlertDialog.Builder(this)
+            .setTitle("Update available")
+            .setMessage(
+                ("%s is published; %s is installed.\n\n%s, %d kB. It is downloaded " +
+                    "from the project's releases page and handed to Android's " +
+                    "installer, which asks before it replaces this app.")
+                    .format(r.tag, installed, r.assetName, (r.size + 1023) / 1024)
+            )
+            .setPositiveButton("Download & install") { _, _ -> downloadAndInstall() }
+            .setNegativeButton("Not now", null)
+            .show()
+    }
+
+    private fun downloadAndInstall() {
+        val r = update ?: return checkForUpdate(manual = true)
+        if (updateBusy) return
+        if (!AppUpdate.isOnline(this)) {
+            showAppState("No network, so nothing was downloaded.")
+            addLog("No network - the download needs one.")
+            return
+        }
+        // Ask for this before spending the download: from Android 8 the
+        // manifest permission is not enough, and without the per-app switch
+        // the installer opens and closes again without saying why.
+        if (!AppUpdate.canInstall(this)) {
+            askToAllowInstalling()
+            return
+        }
+        updateBusy = true
+        btnUpdateInstall.isEnabled = false
+        showAppState("Downloading ${r.tag}...")
+        val file = AppUpdate.cacheFile(this, r)
+        Thread {
+            var failed: String? = null
+            try {
+                AppUpdate.download(r, file) { pct ->
+                    post { showAppState("Downloading ${r.tag}: $pct%") }
+                }
+            } catch (e: Exception) {
+                failed = e.message ?: e.javaClass.simpleName
+            }
+            // Read off the file itself, not off the release: what the phone
+            // compares when it decides whether this is an upgrade is inside
+            // the APK.
+            val refused = if (failed == null) AppUpdate.whyNotInstallable(this, file) else null
+            val why = failed
+            post {
+                updateBusy = false
+                btnUpdateInstall.isEnabled = true
+                // Same as above: and a download that finished after the user
+                // left does not get to open an installer over whatever they
+                // are looking at now.
+                if (isFinishing || isDestroyed) return@post
+                if (why != null) {
+                    file.delete()
+                    showAppState("The download failed: $why")
+                    addLog("Download of ${r.tag} failed: $why")
+                    return@post
+                }
+                if (refused != null) {
+                    file.delete()
+                    showAppState("Not installing it: $refused")
+                    addLog("Refused the downloaded ${r.tag}: $refused")
+                    addLog("The release is at ${AppUpdate.RELEASES_URL}")
+                    return@post
+                }
+                showAppState("${r.tag} downloaded - Android's installer has it now.")
+                addLog("Downloaded ${r.tag}, handed it to the installer.")
+                try {
+                    startActivity(AppUpdate.installIntent(this, file))
+                } catch (e: Exception) {
+                    showAppState("Nothing took the APK: ${e.javaClass.simpleName}")
+                    addLog("No installer for the APK: ${e.javaClass.simpleName} ${e.message ?: ""}")
+                }
+            }
+        }.start()
+    }
+
+    private fun askToAllowInstalling() {
+        AlertDialog.Builder(this)
+            .setTitle("Allow installing?")
+            .setMessage(
+                "Android asks per app for permission to install one. Without it " +
+                    "the installer opens and closes again without saying why. " +
+                    "The switch is this app's \"Install unknown apps\"."
+            )
+            .setPositiveButton("Open settings") { _, _ ->
+                try {
+                    startActivity(AppUpdate.unknownSourcesIntent(this))
+                } catch (e: Exception) {
+                    addLog("Could not open that settings page: ${e.javaClass.simpleName}")
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun post(block: () -> Unit) = main.post(block)
 
     /**
@@ -1432,6 +1638,9 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
     companion object {
         /** See maybeUseGeneratedImage(). */
         private const val EXTRA_TEST_IMAGE = "oepl_test_image"
+
+        /** The release tag the update dialog has already been shown for. */
+        private const val PREF_UPDATE_OFFERED = "update_offered"
 
         private const val REQ_IMAGE = 1
         private const val REQ_FIRMWARE = 2

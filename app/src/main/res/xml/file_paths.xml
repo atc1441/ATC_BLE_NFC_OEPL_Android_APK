@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The one directory the installer is allowed to read out of: where
+     AppUpdate.cacheFile() puts the release it is about to install. -->
+<paths>
+    <cache-path
+        name="updates"
+        path="updates/" />
+</paths>

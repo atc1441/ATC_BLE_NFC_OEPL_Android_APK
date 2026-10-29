@@ -2,6 +2,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.NFC" />
+    <!-- Only ever used for the update check against the releases page. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- So the check can tell "no network" from "the request failed" and skip
+         itself quietly in front of a shelf of tags with no connectivity. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Handing the downloaded APK to the package installer. From Android 8
+         the user still grants this per app in the settings; see
+         AppUpdate.canInstall(). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Reader mode is the whole app; without NFC there is nothing to show. -->
     <uses-feature android:name="android.hardware.nfc" android:required="true" />
 
@@ -22,6 +31,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- The installer cannot read a file:// URI into this app's storage,
+             so the downloaded APK is handed over through here. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <activity
             android:name=".CommandActivity"

@@ -489,6 +489,52 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- ================= APP ================= -->
+            <TextView
+                android:id="@+id/headApp"
+                style="@style/SectionHead"
+                android:text="App version" />
+
+            <LinearLayout
+                android:id="@+id/secApp"
+                style="@style/SectionBody">
+
+                <TextView
+                    android:id="@+id/appState"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingBottom="4dp"
+                    android:textSize="12sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnUpdateCheck"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Check now" />
+
+                    <Button
+                        android:id="@+id/btnUpdateInstall"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:enabled="false"
+                        android:text="Download &amp; install" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="4dp"
+                    android:text="Checked against the project's releases page at startup, and never without a working network connection."
+                    android:textSize="11sp" />
+            </LinearLayout>
+
             <!-- ================= LOG ================= -->
             <TextView
                 android:id="@+id/headLog"

@@ -109,6 +109,11 @@ dependencies {
     // Reads EXIF orientation on every API level, which BitmapFactory ignores.
     implementation("androidx.exifinterface:exifinterface:1.3.7")
     testImplementation("junit:junit:4.13.2")
+    // org.json comes from the platform on a phone, but the android.jar the
+    // unit tests compile against is a stub whose methods throw. The real
+    // implementation on the test classpath is what lets AppUpdate's parsing be
+    // tested against a recorded answer from the releases API.
+    testImplementation("org.json:json:20231013")
     // Gesture routing cannot be unit tested and `adb shell input` cannot
     // express a pinch, so the ScrollView interaction is covered on device.
     androidTestImplementation("androidx.test:core:1.5.0")
