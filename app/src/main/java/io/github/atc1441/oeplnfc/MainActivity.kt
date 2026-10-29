@@ -3,8 +3,10 @@ package io.github.atc1441.oeplnfc
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.graphics.Matrix
 import android.net.Uri
 import android.nfc.NfcAdapter
@@ -211,6 +213,45 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
         setupTagActions()
         syncControls()
         showNfcState()
+        maybeUseGeneratedImage(intent)
+    }
+
+    /**
+     * Put a generated picture in the preview when the launch intent asks for
+     * one, in a debuggable build only.
+     *
+     * The gesture tests need something in the preview: the pan and pinch are
+     * handled by the preview only while it has an image to place, and an empty
+     * one deliberately lets the drag through to the page instead. They cannot
+     * get an image in the ordinary way, because that means driving the system
+     * photo picker, whose UI belongs to another app and differs per phone and
+     * Android version. So:
+     *
+     *   adb shell am start -n io.github.atc1441.oeplnfc/.MainActivity      *       --ez oepl_test_image true
+     *
+     * A release build ignores the extra entirely.
+     */
+    private fun maybeUseGeneratedImage(from: Intent?) {
+        if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return
+        if (from?.getBooleanExtra(EXTRA_TEST_IMAGE, false) != true) return
+        val w = 240
+        val h = 160
+        val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        // Checks, and one half tinted: a pan, a rotation and a zoom all have
+        // to be visible in the result, which a flat fill would not show.
+        for (y in 0 until h) for (x in 0 until w) {
+            val v = if ((x / 16 + y / 16) % 2 == 0) 0xFF else 0x20
+            b.setPixel(x, y, Color.rgb(v, v, if (x < w / 2) 0xFF else v))
+        }
+        picked = b
+        // The panel size comes from the tag, and nothing has been read here,
+        // so without one rerender() has nothing to draw into.
+        widthField.setText("200")
+        heightField.setText("152")
+        opt.resetTransform()
+        syncControls()
+        rerender()
+        addLog("Generated a ${w} x ${h} test image (debug build, test extra).")
     }
 
     // --- sections -----------------------------------------------------------
@@ -1389,6 +1430,9 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
     private val logJob = Runnable { log.text = lines.joinToString("\n") }
 
     companion object {
+        /** See maybeUseGeneratedImage(). */
+        private const val EXTRA_TEST_IMAGE = "oepl_test_image"
+
         private const val REQ_IMAGE = 1
         private const val REQ_FIRMWARE = 2
 

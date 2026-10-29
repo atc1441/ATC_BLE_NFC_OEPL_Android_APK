@@ -22,6 +22,13 @@ import org.junit.runner.RunWith
  * unit test, and `adb shell input` cannot even express a pinch. So it is
  * checked here, with real multi-pointer injection on a real view hierarchy.
  *
+ * Routing goes both ways, and which way is right depends on whether there is
+ * an image: with one, a drag over the preview places it; with none, the
+ * preview is a 260dp hole in the page and the drag has to scroll past it.
+ * Both directions are checked below. The tests that need an image ask the
+ * activity for a generated one, because the alternative is driving the system
+ * photo picker.
+ *
  * Run with: ./gradlew :app:connectedDebugAndroidTest   (needs a device/emulator)
  */
 @RunWith(AndroidJUnit4::class)
@@ -33,13 +40,24 @@ class GestureTest {
     @Before
     fun setUp() {
         device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        launch(withImage = true)
+    }
+
+    /**
+     * Start the app from scratch, with or without a picture in the preview.
+     * [withImage] asks MainActivity for a generated one; see
+     * maybeUseGeneratedImage() there for why the picker is not used.
+     */
+    private fun launch(withImage: Boolean) {
         device.pressHome()
 
         val ctx = InstrumentationRegistry.getInstrumentation().context
         val intent = ctx.packageManager.getLaunchIntentForPackage(pkg)!!
             .addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        if (withImage) intent.putExtra("oepl_test_image", true)
         ctx.startActivity(intent)
         assertTrue("app did not come up", device.wait(Until.hasObject(By.pkg(pkg)), 10_000))
+        device.waitForIdle()
     }
 
     /**
@@ -160,6 +178,44 @@ class GestureTest {
             "dragging over the preview scrolled the page instead of panning",
             before.centerY(), after!!.visibleBounds.centerY()
         )
+    }
+
+    @Test
+    fun anEmptyPreviewLetsThePageScrollInstead() {
+        launch(withImage = false)
+        val preview = scrollTo("preview")
+        device.waitForIdle()
+
+        val before = preview.visibleBounds
+        // Not zoomLabel(): after the page has scrolled the label may well be
+        // off screen, and a test that then fails would be failing about its
+        // own bookkeeping rather than about the gesture.
+        val zoomBefore = device.findObject(By.res(pkg, "lblZoom"))?.text
+        // The same drag that pans a loaded preview. With nothing in it, this
+        // has to reach the ScrollView: an area that shows "No image" and still
+        // swallows drags makes the page impossible to get past.
+        device.swipe(
+            before.centerX(), before.centerY() + before.height() / 4,
+            before.centerX(), before.centerY() - before.height() / 4,
+            25
+        )
+        device.waitForIdle()
+
+        val after = device.findObject(By.res(pkg, "preview"))
+        if (after != null) {
+            assertTrue(
+                "dragging the empty preview did not scroll the page: " +
+                    "${before.centerY()} -> ${after.visibleBounds.centerY()}",
+                before.centerY() - after.visibleBounds.centerY() > 20
+            )
+        }   // gone from the screen altogether is the page having scrolled too
+
+        // And it must not have been taken as a gesture on the way.
+        val zoomAfter = device.findObject(By.res(pkg, "lblZoom"))?.text
+        if (zoomBefore != null && zoomAfter != null) {
+            assertEquals("the empty preview took the drag as a gesture",
+                         zoomBefore, zoomAfter)
+        }
     }
 
     @Test

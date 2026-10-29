@@ -57,6 +57,14 @@ class PanelPreviewView @JvmOverloads constructor(
         preview = bitmap
         panelW = w
         panelH = h
+        if (bitmap == null) {
+            // The image can go away in the middle of a gesture - a failed pick
+            // clears it. Give the scrolling back right away, because the
+            // ACTION_UP that would normally do it arrives at this view only as
+            // long as it still claims the touch.
+            parent?.requestDisallowInterceptTouchEvent(false)
+            lastAngle = Float.NaN
+        }
         invalidate()
     }
 
@@ -112,6 +120,15 @@ class PanelPreviewView @JvmOverloads constructor(
     private var lastAngle = Float.NaN
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        // With no image loaded there is nothing to place, and this is simply a
+        // 260dp hole in the middle of the page. Claiming touches there would
+        // make the page impossible to scroll past, so let them fall through to
+        // the ScrollView; once an image is in, the gestures below take over.
+        // The test is the same one onDraw uses to decide it has nothing to
+        // show, so the area reacts exactly when there is something in it.
+        if (preview == null || panelW <= 0 || panelH <= 0 || options == null)
+            return false
+
         // This view sits in a ScrollView, which otherwise claims any drag once
         // it passes the touch slop - so a pinch or a pan would scroll the page
         // instead of reaching the image. Take the gesture for the whole time a
@@ -156,7 +173,8 @@ class PanelPreviewView @JvmOverloads constructor(
         super.onDraw(canvas)
         val b = preview
         if (b == null || panelW <= 0 || panelH <= 0) {
-            canvas.drawText("No image", 16f, height / 2f, emptyPaint)
+            canvas.drawText("No image - pick one to place it here", 16f,
+                            height / 2f, emptyPaint)
             return
         }
 

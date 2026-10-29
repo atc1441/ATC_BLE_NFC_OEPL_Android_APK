@@ -357,7 +357,14 @@ command that does the opposite of what it says.
 
 The instrumented tests cover what a unit test cannot see. Gesture routing is
 one: the preview sits in a `ScrollView` that will otherwise claim any drag, and
-`adb shell input` cannot even express a pinch. The other is the command screen,
+`adb shell input` cannot even express a pinch. It is routed both ways, which is
+the part worth testing - with an image in it the preview takes the drag and
+places the picture, with nothing in it the drag goes to the page, because an
+area that says "No image" and still swallows drags leaves 260dp of the screen
+that cannot be scrolled past. The tests that need a picture ask the activity
+for a generated one with `--ez oepl_test_image true`, honoured by debuggable
+builds only: the alternative is driving the system photo picker, which belongs
+to another app and looks different on every phone. The other is the command screen,
 which builds over sixty forms at runtime - every one of them gets selected once,
 because a single bad default only shows up when that one command is picked - and
 four of them check that the right *kind* of control came up: that the LED
